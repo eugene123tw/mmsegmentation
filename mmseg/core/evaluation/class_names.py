@@ -275,6 +275,11 @@ def occludedface_palette():
     return [[0, 0, 0], [128, 0, 0]]
 
 
+def hubmap_palette():
+    """HubMAP palette for external use."""
+    return [[0, 0, 0], [0, 255, 0]]
+
+
 dataset_aliases = {
     'cityscapes': ['cityscapes'],
     'ade': ['ade', 'ade20k'],
@@ -289,7 +294,8 @@ dataset_aliases = {
     ],
     'isaid': ['isaid', 'iSAID'],
     'stare': ['stare', 'STARE'],
-    'occludedface': ['occludedface']
+    'occludedface': ['occludedface'],
+    'hubmap': ['hubmap', 'HubMAP'],
 }
 
 

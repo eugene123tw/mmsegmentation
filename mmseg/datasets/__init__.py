@@ -11,6 +11,7 @@ from .dataset_wrappers import (ConcatDataset, MultiImageMixDataset,
 from .drive import DRIVEDataset
 from .face import FaceOccludedDataset
 from .hrf import HRFDataset
+from .hubmap_custom import HubMAPCustomDataset
 from .imagenets import (ImageNetSDataset, LoadImageNetSAnnotations,
                         LoadImageNetSImageFromFile)
 from .isaid import iSAIDDataset
@@ -21,8 +22,6 @@ from .pascal_context import PascalContextDataset, PascalContextDataset59
 from .potsdam import PotsdamDataset
 from .stare import STAREDataset
 from .voc import PascalVOCDataset
-from .hubmap_cityscapes import HubMAPCityscapesDataset
-
 
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
@@ -33,5 +32,5 @@ __all__ = [
     'COCOStuffDataset', 'LoveDADataset', 'MultiImageMixDataset',
     'iSAIDDataset', 'ISPRSDataset', 'PotsdamDataset', 'FaceOccludedDataset',
     'ImageNetSDataset', 'LoadImageNetSAnnotations',
-    'LoadImageNetSImageFromFile', 'HubMAPCityscapesDataset'
+    'LoadImageNetSImageFromFile', 'HubMAPCustomDataset'
 ]

@@ -6,8 +6,8 @@ import numpy as np
 from mmcv.utils import print_log
 from PIL import Image
 
-from . import DATASETS
 from mmseg.datasets import CityscapesDataset
+from . import DATASETS
 
 
 @DATASETS.register_module()
@@ -17,10 +17,17 @@ class HubMAPCityscapesDataset(CityscapesDataset):
     The ``img_suffix`` is fixed to '_leftImg8bit.png' and ``seg_map_suffix`` is
     fixed to '_gtFine_labelTrainIds.png' for Cityscapes dataset.
     """
-    CLASSES = ('glomerulus', 'blood_vessel', 'unsure')
-    PALETTE = [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+    # CLASSES = ('glomerulus', 'blood_vessel', 'unsure')
+    # PALETTE = [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+
     # CLASSES = ('blood_vessel', )
     # PALETTE = [[0, 255, 0]]
+
+    CLASSES = (
+        'background',
+        'blood_vessel',
+    )
+    PALETTE = [[0, 0, 0], [0, 255, 0]]
 
     def __init__(self,
                  img_suffix='_leftImg8bit.tif',

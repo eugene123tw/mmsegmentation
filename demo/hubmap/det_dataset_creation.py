@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import glob
 import json
 import os
 
@@ -6,9 +7,12 @@ import cv2
 import mmcv
 import numpy as np
 import pandas as pd
-from datumaro import DatasetItem, Mask, Polygon
+from datumaro import DatasetItem, Polygon
 from datumaro.components.project import Dataset
 from sklearn.model_selection import KFold
+
+from demo.hubmap.single_model_test import initialize_detector
+from mmdet.apis import inference_detector, init_detector
 
 # Tiles from Dataset 1 have annotations that have been expert reviewed.
 # Tiles from Dataset 2 contains sparse annotations that have NOT been expert reviewed.
@@ -22,13 +26,23 @@ MASK_INDEX = 1
 LABLE_INDEX = 1  # ONLY PICK BLOOD VESSEL
 
 
-def polygon_to_bitmask(coordinates, width, height):
-    # Create a blank image with the given width and height
-    coordinates = np.array(coordinates).astype(np.int32)
-    bitmask = np.zeros(shape=(height, width))
-    cv2.fillPoly(bitmask, coordinates, 1)
-    bitmask = bitmask.astype(bool)
-    return bitmask
+def binary_mask_to_polygon(binary_mask):
+    contours, hierarchies = cv2.findContours(
+        binary_mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    if hierarchies is None:
+        return []
+    polygons = []
+    areas = []
+    for contour, hierarchy in zip(contours, hierarchies[0]):
+        # skip inner contours
+        if hierarchy[3] != -1 or len(contour) <= 2:
+            continue
+        areas.append(cv2.contourArea(contour))
+        polygons.append(contour.flatten())
+
+    if len(polygons) > 1:
+        return polygons[np.argmax(areas)]
+    return polygons[0]
 
 
 class HuBMAPVasculatureDataset:
@@ -37,7 +51,7 @@ class HuBMAPVasculatureDataset:
         self.data_root = data_root
         # self.labels = ['glomerulus', 'blood_vessel', 'unsure']
         # self.labels = ['blood_vessel']
-        self.labels = ['blood_vessel']
+        self.labels = ['glomerulus', 'blood_vessel']
         self.df = pd.read_csv(os.path.join(self.data_root, 'tile_meta.csv'))
         np.random.seed(42)
         self.dsitem_dict = self._make_dsitems()
@@ -55,55 +69,27 @@ class HuBMAPVasculatureDataset:
             img = cv2.imread(os.path.join(train_root, f'{image_id}.tif'))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             attributes = {'filename': f'{self.data_root}/train/{image_id}.tif'}
-            datumaro_masks = []
+            datumaro_polygons = []
 
             for anno in result['annotations']:
                 if anno['type'] not in self.labels:
                     continue
 
                 label_idx = self.labels.index(anno['type'])
-                bitmask = polygon_to_bitmask(anno['coordinates'], img.shape[1],
-                                             img.shape[0])
-                mask = Mask(image=bitmask, label=label_idx)
-                datumaro_masks.append(mask)
+                polygon = Polygon(
+                    points=np.array(anno['coordinates']).flatten(),
+                    label=label_idx,
+                    z_order=0,
+                    attributes=attributes)
+                datumaro_polygons.append(polygon)
 
-            if len(datumaro_masks):
+            if len(datumaro_polygons):
                 dsitem_dict[image_id] = DatasetItem(
                     id=image_id,
-                    annotations=datumaro_masks,
+                    annotations=datumaro_polygons,
                     image=img,
                     attributes=attributes)
         return dsitem_dict
-
-    def analyse_dataset(self):
-        with open(os.path.join(self.data_root, 'polygons.jsonl'),
-                  'r') as json_file:
-            results = list(json_file)
-
-        labels = ['glomerulus', 'blood_vessel', 'unsure']
-
-        polygon_areas = {label: [] for label in labels}
-        for index, result in enumerate(results):
-            result = json.loads(result)
-            for anno in result['annotations']:
-                polygon = Polygon(
-                    points=np.array(anno['coordinates']).flatten())
-                polygon_areas[anno['type']].append(polygon.get_area())
-
-        for label in labels:
-            print(f'Max Area of {label}: {np.max(polygon_areas[label])}')
-            print(f'Min Area of {label}: {np.min(polygon_areas[label])}')
-            print(f'Medium Area of {label}: {np.median(polygon_areas[label])}')
-            print(f'Std Area of {label}: {np.std(polygon_areas[label])}')
-            avg_area = np.mean(polygon_areas[label])
-            low_3std = avg_area - 2 * np.std(polygon_areas[label])
-            high_3std = avg_area + 2 * np.std(polygon_areas[label])
-
-            print(f'Area Percentage of {label}: {avg_area / (512**2) * 100}%')
-            print(
-                f'2 std Area of {label}: {low_3std} < {avg_area} < {high_3std}'
-            )
-            print('\n')
 
     def strategy_1(self):
         """Train on Dataset 1, test on Dataset 2."""
@@ -167,30 +153,24 @@ class HuBMAPVasculatureDataset:
                         dsitems.append(dsitem)
         return dsitems
 
+    def make_coco_split(self, dsitems, n_folds=5):
+        kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+        folds = []
+        for fold, (train_indices, val_indices) in enumerate(kf.split(dsitems)):
+            for index in train_indices:
+                dsitems[index].subset = 'train'
+            for index in val_indices:
+                dsitems[index].subset = 'val'
+            folds.append(dsitems)
+        return folds
+
     def export(self, dsitems, export_path):
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'images'))
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'images', 'train'))
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'images', 'val'))
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'annotations'))
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'annotations', 'train'))
-        mmcv.mkdir_or_exist(os.path.join(export_path, 'annotations', 'val'))
-
-        for dsitem in dsitems:
-            img_folder = os.path.join(export_path, 'images', dsitem.subset)
-            anno_folder = os.path.join(export_path, 'annotations',
-                                       dsitem.subset)
-            image_id = dsitem.id
-            anno = np.zeros(
-                (dsitem.media.data.shape[0], dsitem.media.data.shape[1]))
-            for mask in dsitem.annotations:
-                anno += mask.image
-            anno = np.clip(anno, 0, 1)
-
-            mmcv.imwrite(
-                cv2.cvtColor(dsitem.media.data, cv2.COLOR_RGB2BGR),
-                os.path.join(img_folder, f'{image_id}.png'))
-
-            mmcv.imwrite(anno, os.path.join(anno_folder, f'{image_id}.png'))
+        dataset = Dataset.from_iterable(dsitems, categories=self.labels)
+        dataset.export(
+            f'{export_path}',
+            'coco',
+            default_image_ext='.tif',
+            save_media=True)
 
     def _get_unannotated_images(self):
         image_list = []
@@ -199,14 +179,84 @@ class HuBMAPVasculatureDataset:
                 image_list.append(row)
         return image_list
 
+    def generate_pseudo_labeling(
+        self,
+        config,
+        ckpt,
+        iou_thr=0.5,
+        nms_score_thr=0.001,
+        max_num=100,
+        score_thr=0.8,
+    ):
+        image_list = self._get_unannotated_images()
+
+        config = mmcv.Config.fromfile(config)
+        detector = initialize_detector(config, ckpt, iou_thr, nms_score_thr,
+                                       max_num)
+        dsitems = []
+        for image in image_list:
+            image_path = glob.glob(self.data_root + f'/train/{image["id"]}*')
+            image_path = image_path[0]
+
+            image_id = image['id']
+            attributes = {'filename': image_path}
+            datumaro_polygons = []
+            result = inference_detector(detector, image_path)
+            bboxes, masks = result
+            bboxes, masks = bboxes[LABLE_INDEX], masks[LABLE_INDEX]
+            num_predictions = bboxes.shape[0]
+            for i in range(num_predictions):
+                mask = masks[i]
+                score = bboxes[i][-1]
+                if score >= score_thr and mask.sum() > 0:
+                    # NOTE: add dilation to make the mask larger
+                    mask = mask.astype(np.uint8)
+                    kernel = np.ones(shape=(3, 3), dtype=np.uint8)
+                    bitmask = cv2.dilate(mask, kernel, 3)
+                    bitmask = bitmask.astype(bool)
+                    polygon = binary_mask_to_polygon(bitmask)
+                    polygon = Polygon(
+                        points=np.array(polygon).flatten(),
+                        label=LABLE_INDEX,
+                        z_order=0,
+                        attributes=attributes)
+                    datumaro_polygons.append(polygon)
+            if len(datumaro_polygons):
+                dsitems.append(
+                    DatasetItem(
+                        id=image_id,
+                        annotations=datumaro_polygons,
+                        image=image_path,
+                        attributes=attributes))
+
+        for dsitem in dsitems:
+            dsitem.subset = 'train'
+        return dsitems
+
 
 if __name__ == '__main__':
     dataset = HuBMAPVasculatureDataset(
         data_root='/home/yuchunli/_DATASET/hubmap-hacking-the-human-vasculature'
     )
+    # dsitems = dataset.strategy_1()
+    # dsitems = dataset.strategy_2()
     # dsitems = dataset.strategy_5()
     # dataset.export(
     #     dsitems,
-    #     export_path='/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5')
+    #     export_path='/home/yuchunli/_DATASET/HuBMAP-vasculature-coco-strategy_5'
+    # )
 
-    dataset.analyse_dataset()
+    dsitems = dataset.generate_pseudo_labeling(
+        config=
+        'work_dirs/solov2_x101_dcn_fpn_hubmap_s5_album_simple_aug/solov2_x101_dcn_fpn_hubmap_s5_aug.py',
+        ckpt=
+        'work_dirs/solov2_x101_dcn_fpn_hubmap_s5_album_simple_aug/best_segm_mAP_epoch_15.pth',
+        iou_thr=0.6,
+        nms_score_thr=0.65,
+        max_num=100,
+        score_thr=0.65,
+    )
+    dataset.export(
+        dsitems,
+        export_path=
+        '/home/yuchunli/_DATASET/HuBMAP-vasculature-coco-pseudo-labeling')
