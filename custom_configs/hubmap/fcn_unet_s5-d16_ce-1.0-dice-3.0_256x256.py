@@ -34,8 +34,16 @@ model = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         align_corners=False,
         loss_decode=[
-            dict(type='CrossEntropyLoss', loss_name='loss_ce', loss_weight=1.0, class_weight=[0.01, 1.2]),
-            dict(type='DiceLoss', loss_name='loss_dice', loss_weight=3.0, class_weight=[0.01, 1.2])
+            dict(
+                type='CrossEntropyLoss',
+                loss_name='loss_ce',
+                loss_weight=1.0,
+                class_weight=[0.01, 1.2]),
+            dict(
+                type='DiceLoss',
+                loss_name='loss_dice',
+                loss_weight=3.0,
+                class_weight=[0.01, 1.2])
         ]),
     auxiliary_head=dict(
         type='FCNHead',
@@ -49,11 +57,13 @@ model = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4, class_weight=[0.1, 1.2])),
+            type='CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=0.4,
+            class_weight=[0.1, 1.2])),
     train_cfg=dict(),
     # test_cfg=dict(mode='slide', crop_size=(256, 256), stride=(170, 170))
-    test_cfg=dict(mode='whole')
-)
+    test_cfg=dict(mode='whole'))
 
 log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
 dist_params = dict(backend='nccl')

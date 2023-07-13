@@ -53,4 +53,3 @@ data = dict(
         ann_dir='gtFine/val',
         pipeline=test_pipeline,
         reduce_zero_label=False))
-

@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 from datumaro import DatasetItem, Polygon
 from datumaro.components.project import Dataset
+from mmdet.apis import inference_detector, init_detector
 from sklearn.model_selection import KFold
 
 from demo.hubmap.single_model_test import initialize_detector
-from mmdet.apis import inference_detector, init_detector
 
 # Tiles from Dataset 1 have annotations that have been expert reviewed.
 # Tiles from Dataset 2 contains sparse annotations that have NOT been expert reviewed.

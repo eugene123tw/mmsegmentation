@@ -5,8 +5,13 @@ from . import DATASETS
 
 @DATASETS.register_module()
 class HubMAPCustomDataset(CustomDataset):
-    CLASSES = ('background', 'blood_vessel', )
-    PALETTE = [[0, 0, 0], [0, 255, 0]]
+    CLASSES = (
+        # 'background',
+        'blood_vessel', )
+    PALETTE = [
+        # [0, 0, 0],
+        [0, 255, 0]
+    ]
 
     def __init__(self, **kwargs):
         super(HubMAPCustomDataset, self).__init__(

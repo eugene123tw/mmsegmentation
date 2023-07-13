@@ -1,22 +1,19 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import os
-from argparse import ArgumentParser
-import numpy as np
-import cv2
-
-from mmseg.apis import inference_segmentor
-import mmcv
-
-from mmcv.runner import load_checkpoint
-from mmseg.models import build_segmentor
-
 import base64
-
+import os
 import typing as t
 import zlib
-import pandas as pd
+from argparse import ArgumentParser
 
+import cv2
+import mmcv
+import numpy as np
+import pandas as pd
+from mmcv.runner import load_checkpoint
 from pycocotools import _mask as coco_mask
+
+from mmseg.apis import inference_segmentor
+from mmseg.models import build_segmentor
 
 
 def get_img_paths(folder):
@@ -58,21 +55,21 @@ def encode_binary_mask(mask: np.ndarray) -> t.Text:
     return base64_str
 
 
-def mask_to_polygons(
-        prob_mask,
-        threshold=0.5,
-        area_threshold=100,
-        img_h=512,
-        img_w=512
-    ):
+def _fill_poly(canvas, contour):
+    cv2.fillPoly(canvas, pts=[contour], color=1)
+    return encode_binary_mask(canvas.astype(bool))
 
-    def _fill_poly(canvas, contour):
-        cv2.fillPoly(canvas, pts =[contour], color=1)
-        return encode_binary_mask(canvas.astype(bool))
 
-    def _copy_paste(canvas, score_map):
-        canvas[y1:y2, x1:x2] = score_map > 0.0
-        return encode_binary_mask(canvas.astype(bool))
+def _copy_paste(canvas, score_map, x1, y1, x2, y2):
+    canvas[y1:y2, x1:x2] = score_map > 0.0
+    return encode_binary_mask(canvas.astype(bool))
+
+
+def mask_to_polygons(prob_mask,
+                     threshold=0.5,
+                     area_threshold=100,
+                     img_h=512,
+                     img_w=512):
 
     encoded_strings = []
     scores = []
@@ -88,7 +85,8 @@ def mask_to_polygons(
 
     for contour, hierarchy in zip(contours, hierarchies[0]):
         # skip inner contours
-        if hierarchy[3] != -1 or len(contour) <= 2 or cv2.contourArea(contour) < area_threshold:
+        if hierarchy[3] != -1 or len(contour) <= 2 or cv2.contourArea(
+                contour) < area_threshold:
             continue
         canvas = np.zeros((img_h, img_w), dtype=np.uint8)
 
@@ -100,10 +98,10 @@ def mask_to_polygons(
         score = np.mean(score_map[bit_crop == 1])
 
         # Method 1: fill contour
-        encoded_string = _fill_poly(canvas, contour)
+        # encoded_string = _fill_poly(canvas, contour)
 
         # Method 2: crop prob map and paste it on canvas
-        # encoded_string = _copy_paste(canvas, score_map)
+        encoded_string = _copy_paste(canvas, score_map, x1, y1, x2, y2)
 
         encoded_strings.append(encoded_string)
         scores.append(score)
@@ -130,8 +128,7 @@ def init_segmentor(config, checkpoint=None, device='cuda:0'):
                         'but got {}'.format(type(config)))
     config.model.pretrained = None
     config.model.train_cfg = None
-    # replace EncoderDecoder with CustomEncoderDecoder in order to get prob
-    config.model.type = 'CustomEncoderDecoder'
+    config.model.test_cfg.get_prob = True
 
     model = build_segmentor(config.model, test_cfg=config.get('test_cfg'))
     if checkpoint is not None:
@@ -162,7 +159,7 @@ def hubmap_single_seg_model(image_root, config, ckpt):
         results = inference_segmentor(model, img_path)
         result = results[0]
         # index 0 belongs to the background class
-        mask = result[1]
+        mask = result[0]
         pred_string = ''
         encoded_strings, scores = mask_to_polygons(mask)
         scores = np.array(scores)
@@ -171,7 +168,8 @@ def hubmap_single_seg_model(image_root, config, ckpt):
         scores = scores[indices]
         encoded_strings = [encoded_strings[i] for i in indices]
 
-        for n, (encoded_string, score) in enumerate(zip(encoded_strings, scores)):
+        for n, (encoded_string,
+                score) in enumerate(zip(encoded_strings, scores)):
             if n == 0:
                 pred_string += f"0 {score} {encoded_string.decode('utf-8')}"
             else:
@@ -191,12 +189,13 @@ if __name__ == '__main__':
     parser.add_argument('config', help='Config file')
     parser.add_argument('checkpoint', help='Checkpoint file')
     args = parser.parse_args()
-    ids, prediction_strings, heights, widths = hubmap_single_seg_model(args.path, args.config, args.checkpoint)
+    ids, prediction_strings, heights, widths = hubmap_single_seg_model(
+        args.path, args.config, args.checkpoint)
     submission = pd.DataFrame()
     submission['id'] = ids
     submission['height'] = heights
     submission['width'] = widths
     submission['prediction_string'] = prediction_strings
     submission = submission.set_index('id')
-    submission.to_csv("submission.csv")
+    submission.to_csv('submission.csv')
     print(submission)
