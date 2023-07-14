@@ -1,69 +1,73 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from pathlib import Path
+
+import segmentation_models_pytorch as smp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from mmcv.runner import force_fp32
 
 from mmseg.core import add_prefix
 from mmseg.core.seg.builder import build_pixel_sampler
 from mmseg.models.utils.trans_unet import TransUnetEncoderWrapper
 from mmseg.ops import resize
-from mmcv.runner import force_fp32
-
-from .base import BaseSegmentor
+from ..builder import SEGMENTORS, build_backbone, build_loss
 from ..losses import accuracy
-from ..builder import SEGMENTORS, build_loss, build_backbone
-
-import segmentation_models_pytorch as smp
+from .base import BaseSegmentor
 
 
 class SwinWrapper(nn.Module):
+
     def __init__(self, encoder_name, in_channels=3, weights=None):
         super(SwinWrapper, self).__init__()
         configs = {
-            "swin_tiny": dict(
+            'swin_tiny':
+            dict(
                 embed_dims=96,
                 depths=[2, 2, 6, 2],
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
                 use_abs_pos_embed=False,
                 drop_path_rate=0.3,
-                patch_norm=True
-            ),
-            "swin_small": dict(
+                patch_norm=True),
+            'swin_small':
+            dict(
                 embed_dims=96,
                 depths=[2, 2, 18, 2],
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
                 use_abs_pos_embed=False,
                 drop_path_rate=0.3,
-                patch_norm=True
-            ),
-            "swin_base": dict(
+                patch_norm=True),
+            'swin_base':
+            dict(
                 embed_dims=128,
                 depths=[2, 2, 18, 2],
                 num_heads=[4, 8, 16, 32],
                 window_size=7,
                 use_abs_pos_embed=False,
                 drop_path_rate=0.3,
-                patch_norm=True
-            ),
+                patch_norm=True),
         }
         out_channels = {
-            "swin_tiny": [96, 192, 384, 768],
-            "swin_small": [96, 192, 384, 768],
-            "swin_base": [128, 256, 512, 1024]
+            'swin_tiny': [96, 192, 384, 768],
+            'swin_small': [96, 192, 384, 768],
+            'swin_base': [128, 256, 512, 1024]
         }
         config = configs[encoder_name]
-        config["type"] = "SwinTransformer"
-        config["in_channels"] = in_channels
-        config["pretrained"] = weights
-        if "384" in weights:
-            config["window_size"] = 12
-            config["pretrain_img_size"] = 384
+        config['type'] = 'SwinTransformer'
+        config['in_channels'] = in_channels
+        config['pretrained'] = weights
+        if '384' in weights:
+            config['window_size'] = 12
+            config['pretrain_img_size'] = 384
         else:
-            assert "224" in weights, Exception("need a weight path with valid pretrained image size")
+            assert '224' in weights, Exception(
+                'need a weight path with valid pretrained image size')
         self.model = build_backbone(config)
-        self.out_channels = [in_channels, ] + out_channels[encoder_name]
+        self.out_channels = [
+            in_channels,
+        ] + out_channels[encoder_name]
 
     def forward(self, x):
         outs = [x]
@@ -91,17 +95,17 @@ class SMPUnet(BaseSegmentor):
                  pretrained=None,
                  init_cfg=None):
         super(SMPUnet, self).__init__(init_cfg)
-        encoder_name = backbone.get("type")
-        in_channels = backbone.get("in_channels", 3)
-        encoder_weights = backbone.get("pretrained", "imagenet")
-        encoder_depth = backbone.get("depth", 5)
-        decoder_channels = decode_head.get("channels", (256, 128, 64, 32, 16))
-        decoder_use_batchnorm = decode_head.get("use_batchnorm", True)
-        decoder_attention_type = decode_head.get("attention_type", None)
-        classes = decode_head.get("num_classes", 1)
-        activation = decode_head.get("activation", None)
+        encoder_name = backbone.get('type')
+        in_channels = backbone.get('in_channels', 3)
+        encoder_weights = backbone.get('pretrained', 'imagenet')
+        encoder_depth = backbone.get('depth', 5)
+        decoder_channels = decode_head.get('channels', (256, 128, 64, 32, 16))
+        decoder_use_batchnorm = decode_head.get('use_batchnorm', True)
+        decoder_attention_type = decode_head.get('attention_type', None)
+        classes = decode_head.get('num_classes', 1)
+        activation = decode_head.get('activation', None)
 
-        if "swin" in encoder_name:
+        if 'swin' in encoder_name:
             self.backbone = SwinWrapper(
                 encoder_name,
                 in_channels=in_channels,
@@ -109,14 +113,18 @@ class SMPUnet(BaseSegmentor):
             )
             encoder_depth = 4
         else:
+            weights = None if Path(
+                encoder_weights).exists() else encoder_weights
             self.backbone = smp.encoders.get_encoder(
                 encoder_name,
                 in_channels=in_channels,
                 depth=encoder_depth,
-                weights=encoder_weights,
+                weights=weights,
             )
+            if Path(encoder_weights).exists():
+                self.load_weights(self.backbone, encoder_weights)
 
-        transunet = backbone.get("trans_unet", None)
+        transunet = backbone.get('trans_unet', None)
         if transunet is not None:
             self.backbone = TransUnetEncoderWrapper(self.backbone, transunet)
 
@@ -125,7 +133,7 @@ class SMPUnet(BaseSegmentor):
             decoder_channels=decoder_channels[:encoder_depth],
             n_blocks=encoder_depth,
             use_batchnorm=decoder_use_batchnorm,
-            center=True if encoder_name.startswith("vgg") else False,
+            center=True if encoder_name.startswith('vgg') else False,
             attention_type=decoder_attention_type,
         )
 
@@ -136,15 +144,16 @@ class SMPUnet(BaseSegmentor):
             kernel_size=3,
         )
 
-        self.align_corners = decode_head.get("align_corners", 1)
-        self.num_classes = decode_head.get("num_classes", 1)
-        if decode_head.get("sampler", False):
-            self.sampler = build_pixel_sampler(decode_head["sampler"], context=self)
+        self.align_corners = decode_head.get('align_corners', 1)
+        self.num_classes = decode_head.get('num_classes', 1)
+        if decode_head.get('sampler', False):
+            self.sampler = build_pixel_sampler(
+                decode_head['sampler'], context=self)
         else:
             self.sampler = None
         self.ignore_index = ignore_index
 
-        loss_decode = decode_head.get("loss_decode", None)
+        loss_decode = decode_head.get('loss_decode', None)
         if isinstance(loss_decode, dict):
             self.loss_decode = build_loss(loss_decode)
         elif isinstance(loss_decode, (list, tuple)):
@@ -157,6 +166,10 @@ class SMPUnet(BaseSegmentor):
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
+
+    def load_weights(self, model, encoder_weights: Path):
+        state_dict = torch.load(encoder_weights)
+        model.load_state_dict(state_dict)
 
     @force_fp32(apply_to=('seg_logit', ))
     def losses(self, seg_logit, seg_label):
@@ -315,8 +328,9 @@ class SMPUnet(BaseSegmentor):
                 size = img.shape[2:]
             else:
                 size = img_meta[0]['ori_shape'][:2]
-            if 'pad_shape' in img_meta[0] and img_meta[0]["pad_shape"] != img_meta[0]["img_shape"]:
-                h, w = img.meta[0]["image_shape"][:2]
+            if 'pad_shape' in img_meta[0] and img_meta[0][
+                    'pad_shape'] != img_meta[0]['img_shape']:
+                h, w = img.meta[0]['image_shape'][:2]
                 seg_logit = seg_logit[..., :h, :w]
             seg_logit = resize(
                 seg_logit,
@@ -357,7 +371,7 @@ class SMPUnet(BaseSegmentor):
             loss_decode = self.losses(seg_logit, gt_semantic_seg)
 
             losses.update(add_prefix(loss_decode, 'decode'))
-        if self.test_cfg.get("multi_class", False):
+        if self.test_cfg.get('multi_class', False):
             output = F.softmax(seg_logit, dim=1)
         else:
             output = F.sigmoid(seg_logit)
@@ -375,10 +389,10 @@ class SMPUnet(BaseSegmentor):
     def simple_test(self, img, img_meta, rescale=True, **kwargs):
         """Simple test with single image."""
         seg_logit, losses = self.inference(img, img_meta, rescale, **kwargs)
-        if self.test_cfg.get("get_prob", False):
+        if self.test_cfg.get('get_prob', False):
             seg_pred = seg_logit
         elif seg_logit.shape[1] == 1:
-            thres = self.test_cfg.get("thres", 0.5)
+            thres = self.test_cfg.get('thres', 0.5)
             seg_pred = (seg_logit > thres).squeeze(1)
             seg_pred = seg_pred.long()
         else:
@@ -396,24 +410,27 @@ class SMPUnet(BaseSegmentor):
         # aug_test rescale all imgs back to ori_shape for now
         assert rescale
         # to save memory, we get augmented seg logit inplace
-        seg_logit, losses = self.inference(imgs[0], img_metas[0], rescale, **kwargs)
+        seg_logit, losses = self.inference(imgs[0], img_metas[0], rescale,
+                                           **kwargs)
         for i in range(1, len(imgs)):
-            cur_seg_logit, cur_loss = self.inference(imgs[i], img_metas[i], rescale)
+            cur_seg_logit, cur_loss = self.inference(imgs[i], img_metas[i],
+                                                     rescale)
             seg_logit += cur_seg_logit
             for k in losses:
                 losses[k] += cur_loss[k]
         seg_logit /= len(imgs)
         for k in losses:
             losses[k] /= len(imgs)
-        if self.test_cfg.get("logits", False) and self.test_cfg.get("multi_label", False):
-            seg_pred = seg_logit.permute(0, 2, 3, 1)# .argmax(dim=1)
-        elif self.test_cfg.get("logits", False):
+        if self.test_cfg.get('logits', False) and self.test_cfg.get(
+                'multi_label', False):
+            seg_pred = seg_logit.permute(0, 2, 3, 1)  # .argmax(dim=1)
+        elif self.test_cfg.get('logits', False):
             seg_pred = seg_logit
-        elif self.test_cfg.get("binary_thres", None) is not None:
-            seg_pred = seg_logit[:,1] > self.test_cfg.get("binary_thres")
+        elif self.test_cfg.get('binary_thres', None) is not None:
+            seg_pred = seg_logit[:, 1] > self.test_cfg.get('binary_thres')
             seg_pred = seg_pred.long()
-        elif self.test_cfg.get("multi_label", False):
-            thres = self.test_cfg.get("multi_label_thres", 0.5)
+        elif self.test_cfg.get('multi_label', False):
+            thres = self.test_cfg.get('multi_label_thres', 0.5)
             seg_pred = (seg_logit > thres).permute(0, 2, 3, 1)
             seg_pred = seg_pred.long()
         else:
@@ -426,6 +443,7 @@ class SMPUnet(BaseSegmentor):
 
 @SEGMENTORS.register_module()
 class SMPUnetPlusPlus(SMPUnet):
+
     def __init__(self,
                  backbone,
                  decode_head,
@@ -436,27 +454,21 @@ class SMPUnetPlusPlus(SMPUnet):
                  ignore_index=255,
                  pretrained=None,
                  init_cfg=None):
-        super(SMPUnetPlusPlus, self).__init__(
-            backbone,
-            decode_head,
-            neck,
-            auxiliary_head,
-            train_cfg,
-            test_cfg,
-            ignore_index,
-            pretrained,
-            init_cfg)
-        encoder_name = backbone.get("type")
-        encoder_depth = backbone.get("depth", 5)
-        decoder_channels = decode_head.get("channels", (256, 128, 64, 32, 16))
-        decoder_use_batchnorm = decode_head.get("use_batchnorm", True)
-        decoder_attention_type = decode_head.get("attention_type", None)
+        super(SMPUnetPlusPlus,
+              self).__init__(backbone, decode_head, neck, auxiliary_head,
+                             train_cfg, test_cfg, ignore_index, pretrained,
+                             init_cfg)
+        encoder_name = backbone.get('type')
+        encoder_depth = backbone.get('depth', 5)
+        decoder_channels = decode_head.get('channels', (256, 128, 64, 32, 16))
+        decoder_use_batchnorm = decode_head.get('use_batchnorm', True)
+        decoder_attention_type = decode_head.get('attention_type', None)
 
-        self.decode_head = smp.unetplusplus.decoder.UnetPlusPlusDecoder(
+        self.decode_head = smp.decoders.unetplusplus.decoder.UnetPlusPlusDecoder(
             encoder_channels=self.backbone.out_channels,
             decoder_channels=decoder_channels[:encoder_depth],
             n_blocks=encoder_depth,
             use_batchnorm=decoder_use_batchnorm,
-            center=True if encoder_name.startswith("vgg") else False,
+            center=True if encoder_name.startswith('vgg') else False,
             attention_type=decoder_attention_type,
         )

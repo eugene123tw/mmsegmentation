@@ -55,9 +55,10 @@ def encode_binary_mask(mask: np.ndarray) -> t.Text:
     return base64_str
 
 
-def _fill_poly(canvas, contour):
+def _fill_poly(canvas, contour, full_mask):
+    if full_mask is not None:
+        cv2.fillPoly(full_mask, pts=[contour], color=1)
     cv2.fillPoly(canvas, pts=[contour], color=1)
-    return encode_binary_mask(canvas.astype(bool))
 
 
 def _copy_paste(canvas, score_map, x1, y1, x2, y2):
@@ -69,7 +70,9 @@ def mask_to_polygons(prob_mask,
                      threshold=0.5,
                      area_threshold=100,
                      img_h=512,
-                     img_w=512):
+                     img_w=512,
+                     debug=False,
+                     padding=1):
 
     encoded_strings = []
     scores = []
@@ -77,18 +80,26 @@ def mask_to_polygons(prob_mask,
     bitmask = (prob_mask > threshold).astype(np.uint8)
     kernel = np.ones(shape=(3, 3), dtype=np.uint8)
     bitmask = cv2.dilate(bitmask, kernel, 3)
+    bitmask = np.pad(bitmask, (padding, padding), mode='constant')
 
     contours, hierarchies = cv2.findContours(
         bitmask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     if hierarchies is None:
         return [], []
 
+    if debug:
+        full_mask = np.zeros((img_h + 2 * padding, img_w + 2 * padding),
+                             dtype=np.uint8)
+    else:
+        full_mask = None
+
     for contour, hierarchy in zip(contours, hierarchies[0]):
         # skip inner contours
         if hierarchy[3] != -1 or len(contour) <= 2 or cv2.contourArea(
                 contour) < area_threshold:
             continue
-        canvas = np.zeros((img_h, img_w), dtype=np.uint8)
+        canvas = np.zeros((img_h + 2 * padding, img_w + 2 * padding),
+                          dtype=np.uint8)
 
         x1, x2 = min(contour[:, 0, 0]), max(contour[:, 0, 0])
         y1, y2 = min(contour[:, 0, 1]), max(contour[:, 0, 1])
@@ -98,14 +109,18 @@ def mask_to_polygons(prob_mask,
         score = np.mean(score_map[bit_crop == 1])
 
         # Method 1: fill contour
-        # encoded_string = _fill_poly(canvas, contour)
+        _fill_poly(canvas, contour, full_mask)
+        canvas = canvas[padding:-padding, padding:-padding]
+        encoded_string = encode_binary_mask(canvas.astype(bool))
 
         # Method 2: crop prob map and paste it on canvas
-        encoded_string = _copy_paste(canvas, score_map, x1, y1, x2, y2)
+        # encoded_string = _copy_paste(canvas, score_map, x1, y1, x2, y2)
 
         encoded_strings.append(encoded_string)
         scores.append(score)
-    return encoded_strings, scores
+    if debug:
+        full_mask = full_mask[padding:-padding, padding:-padding]
+    return encoded_strings, scores, full_mask
 
 
 def init_segmentor(config, checkpoint=None, device='cuda:0'):
@@ -161,7 +176,7 @@ def hubmap_single_seg_model(image_root, config, ckpt):
         # index 0 belongs to the background class
         mask = result[0]
         pred_string = ''
-        encoded_strings, scores = mask_to_polygons(mask)
+        encoded_strings, scores, _ = mask_to_polygons(mask)
         scores = np.array(scores)
         indices = np.argsort(scores)[::-1]
 

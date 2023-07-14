@@ -1,17 +1,24 @@
 dataset_type = 'HubMAPCustomDataset'
 data_root = '/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5/'
 
-
 # dataset settings
-img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1], to_rgb=True)
+img_norm_cfg = dict(
+    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], to_rgb=True)
 size = 512
+
+albu_train_transforms = [
+    # dict(type='GridDistortion', p=0.5),
+    # dict(type='RandomBrightnessContrast', p=0.5),
+    dict(type='RandomRotate90', p=0.5)
+]
 
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations'),
     dict(type='Resize', img_scale=(size, size), keep_ratio=True),
     dict(type='RandomFlip', prob=0.5, direction='horizontal'),
-    dict(type='PhotoMetricDistortion'),
+    dict(type='RandomFlip', prob=0.5, direction='vertical'),
+    dict(type='Albu', transforms=albu_train_transforms),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size=(size, size), pad_val=0, seg_pad_val=255),
     dict(type='DefaultFormatBundle'),

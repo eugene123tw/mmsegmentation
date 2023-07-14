@@ -199,12 +199,25 @@ class HuBMAPVasculatureDataset:
                 image_list.append(row)
         return image_list
 
+    def class_balance_weights(self, dsitems):
+        y = [0, 0]
+        for dsitem in dsitems:
+            anno = np.zeros(
+                (dsitem.media.data.shape[0], dsitem.media.data.shape[1]))
+            for mask in dsitem.annotations:
+                anno += mask.image
+            anno = np.clip(anno, 0, 1)
+            y[0] += np.sum(anno == 0)
+            y[1] += np.sum(anno == 1)
+        print(y[0] / y[1])
+
 
 if __name__ == '__main__':
     dataset = HuBMAPVasculatureDataset(
         data_root='/home/yuchunli/_DATASET/hubmap-hacking-the-human-vasculature'
     )
-    # dsitems = dataset.strategy_5()
+    dsitems = dataset.strategy_5()
+    dataset.class_balance_weights(dsitems)
     # dataset.export(
     #     dsitems,
     #     export_path='/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5')

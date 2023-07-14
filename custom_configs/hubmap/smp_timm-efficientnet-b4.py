@@ -9,11 +9,21 @@ norm_cfg = dict(type='SyncBN', requires_grad=True)
 
 loss = [
     dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+    dict(
+        type='SMPDiceLoss',
+        mode='multilabel',
+        alpha=0.1,
+        beta=0.9,
+        loss_weight=3.0),
+    # dict(type='RecallCrossEntropy')
 ]
 
 model = dict(
     type='SMPUnet',
-    backbone=dict(type='timm-efficientnet-b0', pretrained='imagenet'),
+    backbone=dict(
+        type='timm-efficientnet-b4',
+        pretrained='noisy-student',
+    ),
     decode_head=dict(
         num_classes=num_classes, align_corners=False, loss_decode=loss),
     # model training and testing settings
@@ -43,10 +53,11 @@ lr_config = dict(
     min_lr=0.0,
     by_epoch=False)
 runner = dict(type='IterBasedRunner', max_iters=int(total_iters * 500))
-checkpoint_config = dict(by_epoch=False, interval=int(total_iters * 500))
+checkpoint_config = dict(by_epoch=False, interval=1000)
 evaluation = dict(
     by_epoch=False,
     interval=min(500, int(total_iters * 500)),
-    metric='mDice',
+    metric=['mIoU', 'mFscore'],
     pre_eval=True,
-    save_best='mDice')
+    beta=2,
+    save_best='mFscore')

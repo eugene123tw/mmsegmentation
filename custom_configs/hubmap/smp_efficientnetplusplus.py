@@ -12,13 +12,19 @@ loss = [
 ]
 
 model = dict(
-    type='SMPUnet',
-    backbone=dict(type='timm-efficientnet-b0', pretrained='imagenet'),
+    type='SMPUnetPlusPlus',
+    backbone=dict(
+        type='se_resnext50_32x4d',
+        pretrained=
+        '/home/yuchunli/_MODELS/pretrainedmodels/se_resnext50_32x4d-a260b3a4.pth'
+    ),
     decode_head=dict(
         num_classes=num_classes, align_corners=False, loss_decode=loss),
     # model training and testing settings
     train_cfg=dict(),
-    test_cfg=dict(mode='whole', multi_class=False))
+    test_cfg=dict(mode='whole', multi_class=False),
+    # test_cfg=dict(mode='slide', stride=256, crop_size=256, multi_class=False),
+)
 
 log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
 
