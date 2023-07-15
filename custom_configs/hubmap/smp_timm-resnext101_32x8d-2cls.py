@@ -1,8 +1,8 @@
 _base_ = [
-    './_base_/datasets/hubmap_custom_512x512_aug.py',
+    './_base_/datasets/hubmap_custom_512x512_aug_2cls.py',
 ]
 
-num_classes = 1
+num_classes = 3
 
 # model settings
 norm_cfg = dict(type='SyncBN', requires_grad=True)
@@ -12,11 +12,9 @@ norm_cfg = dict(type='SyncBN', requires_grad=True)
 loss = [
     dict(
         type='CrossEntropyLoss',
-        use_sigmoid=True,
         loss_weight=1.0,
-        class_weight=19.3447690664845),
-    dict(type='SMPDiceLoss', mode='multilabel'),
-    # dict(type='RecallCrossEntropy')
+        class_weight=[0.36357024, 7.42389745, 8.71082407]),
+    dict(type='SMPDiceLoss', mode='multiclass'),
 ]
 
 model = dict(
@@ -29,7 +27,7 @@ model = dict(
         num_classes=num_classes, align_corners=False, loss_decode=loss),
     # model training and testing settings
     train_cfg=dict(),
-    test_cfg=dict(mode='whole', multi_class=False))
+    test_cfg=dict(mode='whole', multi_class=True))
 
 log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
 
@@ -55,7 +53,7 @@ lr_config = dict(
     min_lr=0.0,
     by_epoch=False)
 runner = dict(type='IterBasedRunner', max_iters=int(total_iters * 500))
-checkpoint_config = dict(by_epoch=False, interval=1000)
+checkpoint_config = dict(by_epoch=False, interval=500)
 evaluation = dict(
     by_epoch=False,
     interval=min(500, int(total_iters * 500)),

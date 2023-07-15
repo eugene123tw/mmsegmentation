@@ -23,7 +23,10 @@ class EvalHook(_EvalHook):
         list: The prediction results.
     """
 
-    greater_keys = ['mIoU', 'mAcc', 'aAcc']
+    greater_keys = [
+        'acc', 'top', 'AR@', 'auc', 'precision', 'mAP', 'mDice', 'mIoU',
+        'mAcc', 'aAcc', 'mFscore', 'Fscore.blood_vessel'
+    ]
 
     def __init__(self,
                  *args,
@@ -31,6 +34,7 @@ class EvalHook(_EvalHook):
                  efficient_test=False,
                  pre_eval=False,
                  **kwargs):
+        self._default_greater_keys = EvalHook.greater_keys
         super().__init__(*args, by_epoch=by_epoch, **kwargs)
         self.pre_eval = pre_eval
         self.latest_results = None

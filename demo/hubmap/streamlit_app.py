@@ -15,8 +15,8 @@ from mmseg.models import build_segmentor
 IMAGE_PATH = '/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5/images/val'
 ANNOTATION_PATH = '/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5/annotations/val'
 
-CONFIG = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d/smp_timm-resnext101_32x8d.py'
-CKPT = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d/best_mFscore_iter_1000.pth'
+CONFIG = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d-2cls/smp_timm-resnext101_32x8d-2cls.py'
+CKPT = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d-2cls/best_mFscore_iter_500.pth'
 
 
 @st.cache_data
@@ -57,6 +57,8 @@ def load_annotation(image_name: str, path_to_folder: str):
     gt_semantic_seg = mmcv.imfrombytes(
         img_bytes, flag='unchanged',
         backend='pillow').squeeze().astype(np.uint8)
+    gt_semantic_seg[gt_semantic_seg == 1] = True
+    gt_semantic_seg[gt_semantic_seg != 1] = False
     return gt_semantic_seg
 
 
@@ -77,20 +79,9 @@ def blend(image, mask):
 
 
 def select_image(path_to_images: str, path_to_annotations: str, thres=0.3):
-    """ Show interface to choose the image, and load it
-    Args:
-        path_to_images (dict): path ot folder with images
-        interface_type (dict): mode of the interface used
-    Returns:
-        (status, image)
-        status (int):
-            0 - if everything is ok
-            1 - if there is error during loading of image file
-            2 - if user hasn't uploaded photo yet
-    """
     image_names_list = get_images_list(path_to_images)
     if len(image_names_list) < 1:
-        return 1, 0
+        return False, False, False
     else:
         image_name = st.sidebar.selectbox('Select an image:', image_names_list)
         try:
@@ -103,9 +94,9 @@ def select_image(path_to_images: str, path_to_annotations: str, thres=0.3):
                 image, CONFIG, CKPT, thres=thres)
             pred_blended = blend(image, pred_mask)
 
-            return 0, gt_blended, pred_blended
+            return True, gt_blended, pred_blended
         except cv2.error:
-            return 1, 0, 0
+            return False, False, False
 
 
 @st.cache_data
@@ -150,7 +141,7 @@ def hubmap_single_seg_model(img, config, ckpt, thres=0.3):
     results = inference_segmentor(model, img)
     result = results[0]
     # index 0 belongs to the background class
-    mask = result[0]
+    mask = result[2]
     encoded_strings, scores, full_mask = mask_to_polygons(
         mask, threshold=thres, debug=True)
     return full_mask
@@ -165,10 +156,8 @@ def main():
     # select image
     status, image, pred_blended = select_image(IMAGE_PATH, ANNOTATION_PATH,
                                                thres)
-    if status == 1:
-        st.title("Can't load image")
-    if status == 2:
-        st.title('Please, upload the image')
+    if status:
+        st.title('Error')
     else:
         st.image([image, pred_blended],
                  caption=['Original image', 'Predicted mask'])

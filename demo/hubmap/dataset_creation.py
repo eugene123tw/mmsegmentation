@@ -9,6 +9,7 @@ import pandas as pd
 from datumaro import DatasetItem, Mask, Polygon
 from datumaro.components.project import Dataset
 from sklearn.model_selection import KFold
+from sklearn.utils.class_weight import compute_class_weight
 
 # Tiles from Dataset 1 have annotations that have been expert reviewed.
 # Tiles from Dataset 2 contains sparse annotations that have NOT been expert reviewed.
@@ -36,8 +37,9 @@ class HuBMAPVasculatureDataset:
     def __init__(self, data_root) -> None:
         self.data_root = data_root
         # self.labels = ['glomerulus', 'blood_vessel', 'unsure']
+        self.labels = ['glomerulus', 'blood_vessel']
+        # self.labels = ['glomerulus']
         # self.labels = ['blood_vessel']
-        self.labels = ['blood_vessel']
         self.df = pd.read_csv(os.path.join(self.data_root, 'tile_meta.csv'))
         np.random.seed(42)
         self.dsitem_dict = self._make_dsitems()
@@ -183,8 +185,7 @@ class HuBMAPVasculatureDataset:
             anno = np.zeros(
                 (dsitem.media.data.shape[0], dsitem.media.data.shape[1]))
             for mask in dsitem.annotations:
-                anno += mask.image
-            anno = np.clip(anno, 0, 1)
+                anno[mask.image == True] = mask.label + 1
 
             mmcv.imwrite(
                 cv2.cvtColor(dsitem.media.data, cv2.COLOR_RGB2BGR),
@@ -200,16 +201,17 @@ class HuBMAPVasculatureDataset:
         return image_list
 
     def class_balance_weights(self, dsitems):
-        y = [0, 0]
+        bins = np.array([0, 0, 0])
         for dsitem in dsitems:
-            anno = np.zeros(
-                (dsitem.media.data.shape[0], dsitem.media.data.shape[1]))
-            for mask in dsitem.annotations:
-                anno += mask.image
-            anno = np.clip(anno, 0, 1)
-            y[0] += np.sum(anno == 0)
-            y[1] += np.sum(anno == 1)
-        print(y[0] / y[1])
+            if dsitem.subset == 'train':
+                anno = np.zeros(
+                    (dsitem.media.data.shape[0], dsitem.media.data.shape[1]))
+                for mask in dsitem.annotations:
+                    anno[mask.image == True] = mask.label + 1
+                bins[0] += np.sum(anno == 0)
+                bins[1] += np.sum(anno == 1)
+                bins[2] += np.sum(anno == 2)
+        print(np.sum(bins) / (len(bins) * bins.astype(np.float64)))
 
 
 if __name__ == '__main__':
@@ -217,9 +219,9 @@ if __name__ == '__main__':
         data_root='/home/yuchunli/_DATASET/hubmap-hacking-the-human-vasculature'
     )
     dsitems = dataset.strategy_5()
-    dataset.class_balance_weights(dsitems)
     # dataset.export(
     #     dsitems,
-    #     export_path='/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5')
+    #     export_path='/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5-2cls')
+    dataset.class_balance_weights(dsitems)
 
-    dataset.analyse_dataset()
+    # dataset.analyse_dataset()
