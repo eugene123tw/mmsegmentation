@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from datumaro import DatasetItem, Polygon
 from datumaro.components.project import Dataset
-from mmdet.apis import inference_detector, init_detector
+from mmdet.apis import inference_detector
 from sklearn.model_selection import KFold
 
 from demo.hubmap.single_model_test import initialize_detector
@@ -119,7 +119,6 @@ class HuBMAPVasculatureDataset:
 
     def strategy_3(self):
         """Train on Dataset 1, test on Dataset 1."""
-        pass
 
     def strategy_4(self):
         """Train on WSI_1 (Dataset 1 + Dataset 2) , test on WSI_2 (Dataset

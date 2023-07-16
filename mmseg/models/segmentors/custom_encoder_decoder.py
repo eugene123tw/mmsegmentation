@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import torch
 
 from ..builder import SEGMENTORS
 from .encoder_decoder import EncoderDecoder

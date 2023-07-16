@@ -7,9 +7,6 @@ import mmcv
 import numpy as np
 import pandas as pd
 from datumaro import DatasetItem, Mask, Polygon
-from datumaro.components.project import Dataset
-from sklearn.model_selection import KFold
-from sklearn.utils.class_weight import compute_class_weight
 
 # Tiles from Dataset 1 have annotations that have been expert reviewed.
 # Tiles from Dataset 2 contains sparse annotations that have NOT been expert reviewed.
@@ -135,7 +132,6 @@ class HuBMAPVasculatureDataset:
 
     def strategy_3(self):
         """Train on Dataset 1, test on Dataset 1."""
-        pass
 
     def strategy_4(self):
         """Train on WSI_1 (Dataset 1 + Dataset 2) , test on WSI_2 (Dataset

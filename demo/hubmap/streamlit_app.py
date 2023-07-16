@@ -16,7 +16,7 @@ IMAGE_PATH = '/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5/images/val'
 ANNOTATION_PATH = '/home/yuchunli/_DATASET/HuBMAP-vasculature-custom-s5/annotations/val'
 
 CONFIG = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d-2cls/smp_timm-resnext101_32x8d-2cls.py'
-CKPT = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d-2cls/best_mFscore_iter_500.pth'
+CKPT = '/home/yuchunli/git/mmsegmentation/work_dirs/smp_timm-resnext101_32x8d-2cls/best_Fscore.blood_vessel_iter_3000.pth'
 
 
 @st.cache_data
@@ -86,12 +86,15 @@ def select_image(path_to_images: str, path_to_annotations: str, thres=0.3):
         image_name = st.sidebar.selectbox('Select an image:', image_names_list)
         try:
             image = load_image(image_name, path_to_images)
+
+            image_path = os.path.join(path_to_images, image_name)
+
             # load annotation
             mask = load_annotation(image_name, path_to_annotations)
             gt_blended = blend(image, mask)
 
             pred_mask = hubmap_single_seg_model(
-                image, CONFIG, CKPT, thres=thres)
+                image_path, CONFIG, CKPT, thres=thres)
             pred_blended = blend(image, pred_mask)
 
             return True, gt_blended, pred_blended
@@ -154,9 +157,9 @@ def main():
     thres = st.sidebar.slider('Threshold', 0.0, 1.0, 0.3, 0.01)
 
     # select image
-    status, image, pred_blended = select_image(IMAGE_PATH, ANNOTATION_PATH,
+    success, image, pred_blended = select_image(IMAGE_PATH, ANNOTATION_PATH,
                                                thres)
-    if status:
+    if not success:
         st.title('Error')
     else:
         st.image([image, pred_blended],
