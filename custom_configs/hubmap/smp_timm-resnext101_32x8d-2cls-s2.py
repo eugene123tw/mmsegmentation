@@ -1,5 +1,5 @@
 _base_ = [
-    './_base_/datasets/hubmap_custom_512x512_aug_2cls.py',
+    './_base_/datasets/hubmap_custom_512x512_s2_aug_2cls.py',
 ]
 
 num_classes = 3
@@ -11,7 +11,7 @@ norm_cfg = dict(type='SyncBN', requires_grad=True)
 
 loss = [
     dict(type='CrossEntropyLoss', loss_weight=1.0),
-    dict(type='SMPDiceLoss', mode='multiclass'),
+    dict(type='SMPDiceLoss', mode='multiclass', loss_weight=3.0),
 ]
 
 model = dict(
@@ -26,7 +26,10 @@ model = dict(
     train_cfg=dict(),
     test_cfg=dict(mode='whole', multi_class=True))
 
-log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
+log_config = dict(interval=50, hooks=[
+    dict(type='TextLoggerHook', by_epoch=False),
+    dict(type='TensorboardLoggerHook', by_epoch=False)
+])
 
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
