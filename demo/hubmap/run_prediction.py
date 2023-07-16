@@ -77,7 +77,7 @@ def mask_to_polygons(prob_mask,
     encoded_strings = []
     scores = []
 
-    bitmask = (prob_mask > threshold).astype(np.uint8)
+    bitmask = (prob_mask >= threshold).astype(np.uint8)
     kernel = np.ones(shape=(3, 3), dtype=np.uint8)
     bitmask = cv2.dilate(bitmask, kernel, 3)
     bitmask = np.pad(bitmask, (padding, padding), mode='constant')
@@ -141,7 +141,7 @@ def init_segmentor(config, checkpoint=None, device='cuda:0'):
     elif not isinstance(config, mmcv.Config):
         raise TypeError('config must be a filename or Config object, '
                         'but got {}'.format(type(config)))
-    config.model.pretrained = None
+    config.model.backbone.pretrained = None
     config.model.train_cfg = None
     config.model.test_cfg.get_prob = True
 
@@ -174,7 +174,7 @@ def hubmap_single_seg_model(image_root, config, ckpt):
         results = inference_segmentor(model, img_path)
         result = results[0]
         # index 0 belongs to the background class
-        mask = result[0]
+        mask = result[2]
         pred_string = ''
         encoded_strings, scores, _ = mask_to_polygons(mask)
         scores = np.array(scores)
@@ -183,8 +183,8 @@ def hubmap_single_seg_model(image_root, config, ckpt):
         scores = scores[indices]
         encoded_strings = [encoded_strings[i] for i in indices]
 
-        for n, (encoded_string,
-                score) in enumerate(zip(encoded_strings, scores)):
+        n = 0
+        for encoded_string, score in zip(encoded_strings, scores):
             if n == 0:
                 pred_string += f"0 {score} {encoded_string.decode('utf-8')}"
             else:

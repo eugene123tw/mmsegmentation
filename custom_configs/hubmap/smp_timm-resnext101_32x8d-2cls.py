@@ -57,7 +57,6 @@ checkpoint_config = dict(by_epoch=False, interval=500)
 evaluation = dict(
     by_epoch=False,
     interval=min(500, int(total_iters * 500)),
-    metric=['mIoU', 'mFscore'],
+    metric=['mIoU', 'mDice'],
     pre_eval=True,
-    beta=2,
-    save_best='mFscore')
+    save_best='IoU.blood_vessel')

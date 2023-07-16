@@ -113,16 +113,12 @@ class SMPUnet(BaseSegmentor):
             )
             encoder_depth = 4
         else:
-            weights = None if Path(
-                encoder_weights).exists() else encoder_weights
             self.backbone = smp.encoders.get_encoder(
                 encoder_name,
                 in_channels=in_channels,
                 depth=encoder_depth,
-                weights=weights,
+                weights=encoder_weights,
             )
-            if Path(encoder_weights).exists():
-                self.load_weights(self.backbone, encoder_weights)
 
         transunet = backbone.get('trans_unet', None)
         if transunet is not None:
