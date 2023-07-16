@@ -25,7 +25,7 @@ class EvalHook(_EvalHook):
 
     greater_keys = [
         'acc', 'top', 'AR@', 'auc', 'precision', 'mAP', 'mDice', 'mIoU',
-        'mAcc', 'aAcc', 'mFscore', 'Fscore.blood_vessel'
+        'mAcc', 'aAcc', 'mFscore', 'Fscore.blood_vessel', 'IoU.blood_vessel'
     ]
 
     def __init__(self,
